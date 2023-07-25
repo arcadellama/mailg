@@ -1,3 +1,4 @@
-*.conf
+mailgrc
+.mailgrc
 .env
 .DS_Store

@@ -24,7 +24,6 @@
 Prgnam='mailg'
 Version='0.0.42'
 Verbose=0
-Debug=0
 Config_File_Name="${Prgnam}rc"
 Config_Defaults="
 $PWD/$Config_File_Name
@@ -44,33 +43,42 @@ MAILGUN_FROM_NAME="${MAILGUN_FROM_NAME:-$NAME}"   # Optional
 # Usage and Help
 usage() {
   cat << EOF
-$(clr bld)Usage: $Prgnam [-dv] [-b $(clr rst ita)bcc$(clr rst bld)] [-c $(clr rst ita)cc$(clr rst bld)] [-r $(clr rst ita)address$(clr rst bld)] [-s $(clr rst ita)subject$(clr rst bld)] $(clr rst ita)recipient$(clr rst)
+$(clr bld)USAGE
+$Prgnam [-Edvq] [-b $(clr rst ita)bcc$(clr rst bld)] [-c $(clr rst ita)cc$(clr rst bld)] [-r $(clr rst ita)address$(clr rst bld)] [-s $(clr rst ita)subject$(clr rst bld)] [-C $(clr rst ita)config$(clr rst bld)] $(clr rst ita)recipient$(clr rst)
 EOF
 }
 
 help() {
   cat << EOF
-$(clr bld)$Prgnam$(clr rst)
-Version: $Version
+$(clr bld)$Prgnam$(clr rst) -- Version: $Version
 Send mail via mailgun and curl from the command-line.
 
 $(usage)
 
-    -v    Verbose mode.
-    -d    Debug mode.
+    $(clr bld)-E$(clr rst)    Abort send if no message.
+    $(clr bld)-d$(clr rst)    Debug mode.
+    $(clr bld)-v$(clr rst)    Verbose mode.
+    $(clr bld)-q$(clr rst)    Quiet mode.
     
-    -C    Configuration file.
-    -s    Subject.
-    -r    From email.
-    -F    From name.
+    $(clr bld)-C$(clr rst)    Configuration file.
+    $(clr bld)-s$(clr rst)    Subject.
+    $(clr bld)-r$(clr rst)    From address.
+    $(clr bld)-F$(clr rst)    From name.
 
-ENVIRONMENT VARIABLES
-$(clr bld)
+$(clr bld)ENVIRONMENT VARIABLES
     MAILGUN_API_KEY
     MAILGUN_API_DOMAIN
-    MAILGUN_API_URL (default: https://api.mailgun.net/v3)
+    MAILGUN_API_URL $(clr rst ita)(default: https://api.mailgun.net/v3)$(clr rst bld)
     MAILGUN_FROM_ADDRESS
     MAILGUN_FROM_NAME
+$(clr rst)
+$(clr bld)CONFIGURATION FILE LOCATIONS
+    ./$Config_File_Name
+    ./.$Config_File_Name
+    \$HOME/.$Config_File_Name
+    \$HOME/.config/$Config_File_Name
+    /usr/local/etc/$Config_File_Name
+    /etc/$Config_File_Name
 $(clr rst)
 EOF
 }
@@ -81,7 +89,9 @@ out() {
 }
 
 err() {
-  >&2 out "$(clr bld red)[$Prgnam] ERROR: $*$(clr rst)"
+  if [ "$Verbose" -ge 0 ]; then
+    >&2 out "$(clr red bld)[$Prgnam] ERROR: $*$(clr rst)"
+  fi
 }
 
 die() {
@@ -91,18 +101,18 @@ die() {
 
 warn() {
   if [ "$Verbose" -ge 1 ]; then
-    >&2 out "$(clr bld ylw)[$Prgnam] WARN: $*$(clr rst)"
+    >&2 out "$(clr ylw bld)[$Prgnam] WARN: $*$(clr rst)"
   fi
 }
 
 info() {
   if [ "$Verbose" -ge 1 ]; then
-    >&2 out "$(clr bld grn)[$Prgnam]: $*$(clr rst)"
+    >&2 out "$(clr bld)[$Prgnam]: $*$(clr rst)"
   fi
 }
 
 debug() {
-  if [ "$Debug" -ge 1 ]; then
+  if [ "$Verbose" -ge 2 ]; then
     >&2 out "[$Prgnam] DEBUG: $*"
   fi
 }
@@ -165,6 +175,7 @@ main() {
   message=""
   attach=""
   from=""
+  no_msg_skip=false
 
   # Check for configuration file
   for _conf in $Config_Defaults; do
@@ -173,11 +184,12 @@ main() {
     fi
   done
 
-  while getopts ':dhqvC:a:F:f:r:s:' OPTION; do
+  while getopts ':dhqvCE:a:F:f:r:s:' OPTION; do
     case "$OPTION" in
-      d) Debug=1 ;;
+      d) Verbose=3 ;;
+      E) no_msg_skip=true ;;
       h) help ; return ;;
-      q) Verbose=0 ;;
+      q) Verbose=-1 ;;
       v) Verbose=1 ;;
       a) attach="$(append_array "$OPTARG" "$attach")" ;;
       C) . "$OPTARG" || exit 1 ;;
@@ -199,13 +211,11 @@ main() {
   
   # Check from Environment variables
   if [ -z "$MAILGUN_API_KEY" ]; then
-    err "MAILGUN_API_KEY unset."
-  fi
-  if [ -z "$MAILGUN_API_DOMAIN" ]; then
-    err "MAILGUN_API_DOMAIN unset."
-  fi
-  if [ -z "$MAILGUN_API_URL" ]; then
-    err "MAILGUN_API_URL unset."
+    die "MAILGUN_API_KEY unset."
+  elif [ -z "$MAILGUN_API_DOMAIN" ]; then
+    die "MAILGUN_API_DOMAIN unset."
+  elif [ -z "$MAILGUN_API_URL" ]; then
+    die "MAILGUN_API_URL unset."
   fi
   
   # Build "From" address
@@ -218,12 +228,10 @@ main() {
   else
     from="$from_addr"
   fi
-
   # Check for To: address
   if [ -z "$1" ]; then
-    err "No recipient address."
+    die "No recipient address."
   fi
-  
   # Build recipient array
   count=0
   for _to in "$@"; do
@@ -238,10 +246,21 @@ main() {
     done
   fi
 
+  # Final variable check
+  if [ -z "$subject" ]; then
+    warn "No subject."
+  fi
+  if [ -z "$message" ]; then
+    if "$no_msg_skip"; then
+      info "No message, aborting send."
+      return
+    fi
+    warn "No message set."
+  fi
+
   debug "MAILGUN_API_KEY=$MAILGUN_API_KEY"
   debug "MAILGUN_API_URL=$MAILGUN_API_URL"
   debug "Verbose=$Verbose"
-  debug "Debug=$Debug"
   debug "attach=$attach"
   debug "subj=$subj"
   debug "from_addr=$from_addr"
@@ -249,7 +268,7 @@ main() {
   debug "from=$from"
   debug "recipients=$*"
   debug "message=$message"
-  
+
   # Post message
   _res=$(mktemp 2>&1) || die "$_res"    # temp file to cleanup later
   if ! _ret=$(curl -sS \
@@ -265,7 +284,7 @@ main() {
     return 1
   fi
 
-  info "$(cat "$_res")"
+  info "curl response: $(cat "$_res")"
   rm "$_res"                          # cleanup temp file
 
   if [ "$_ret" -ge 400 ]; then
