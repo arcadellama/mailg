@@ -169,7 +169,7 @@ append_array() {
 }
 
 main() {
-  subj=""
+  subject=""
   from_addr=""
   from_name=""
   message=""
@@ -195,7 +195,7 @@ main() {
       C) . "$OPTARG" || exit 1 ;;
       F) from_name="$OPTARG" ;;
       f|r) from_addr="$OPTARG" ;;
-      s) subj="$OPTARG" ;;
+      s) subject="$OPTARG" ;;
       *) usage ; exit 1 ;;
     esac
   done
@@ -236,7 +236,7 @@ main() {
   count=0
   for _to in "$@"; do
     [ "$count" -eq 0 ] && set --; count=$((count +1))
-    set -- "$@" -F "text=$_to"
+    set -- "$@" -F "to=$_to"
   done
 
   # Append attachments to array
@@ -262,7 +262,7 @@ main() {
   debug "MAILGUN_API_URL=$MAILGUN_API_URL"
   debug "Verbose=$Verbose"
   debug "attach=$attach"
-  debug "subj=$subj"
+  debug "subject=$subject"
   debug "from_addr=$from_addr"
   debug "from_name=$from_name"
   debug "from=$from"
@@ -276,7 +276,7 @@ main() {
     -o "$_res" \
     --user "api:$MAILGUN_API_KEY" \
     "$MAILGUN_API_URL/$MAILGUN_API_DOMAIN/messages" \
-    -F "subject=$subj" \
+    -F "subject=$subject" \
     -F "text=$message" \
     -F "from=$from" \
     "$@" 2>&1); then
