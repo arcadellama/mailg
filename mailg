@@ -25,26 +25,35 @@ Prgnam='mailg'
 Version='0.0.42'
 Verbose=0
 Debug=0
+Config_File_Name="${Prgnam}rc"
 Config_Defaults="
-$PWD/$Prgnam.conf
-$PWD/.$Prgnam.conf
-$HOME/.$Prgnam.conf
-${XDG_CONFIG_HOME:-$HOME/.config}/$Prgnam.conf
+$PWD/$Config_File_Name
+$PWD/.$Config_File_Name
+$HOME/.$Config_File_Name
+${XDG_CONFIG_HOME:-$HOME/.config}/$Config_File_Name
+/usr/local/etc/$Config_File_Name
+/etc/$Config_File_Name
 "
 # Envioronment variables
 MAILGUN_API_KEY="${MAILGUN_API_KEY:-}" 
 MAILGUN_API_DOMAIN="${MAILGUN_API_DOMAIN:-}"
 MAILGUN_API_URL="${MAILGUN_API_URL:-https://api.mailgun.net/v3}"
 MAILGUN_FROM_ADDRESS="${MAILGUN_FROM_ADDRESS:-}"  # Optional
-MAILGUN_FROM_NAME="${MAILGUN_FROM_NAME:-}"        # Optional
+MAILGUN_FROM_NAME="${MAILGUN_FROM_NAME:-$NAME}"   # Optional
 
-# Usage
+# Usage and Help
 usage() {
+  cat << EOF
+$(clr bld)Usage: $Prgnam [-dv] [-b $(clr rst ita)bcc$(clr rst bld)] [-c $(clr rst ita)cc$(clr rst bld)] [-r $(clr rst ita)address$(clr rst bld)] [-s $(clr rst ita)subject$(clr rst bld)] $(clr rst ita)recipient$(clr rst)
+EOF
+}
+
+help() {
   cat << EOF
 $Prgnam -- $Version
 Send mail via mailgun and curl from the command-line.
 
-Usage: $Prgnam [-vdE] [-s subject] [-r from email] [-F from name] to-address
+$(usage)
 
     -v    Verbose mode.
     -d    Debug mode.
@@ -90,6 +99,37 @@ debug() {
   fi
 }
 
+clr() {
+  # Receives: color / format
+  # Returns: Prints ANSI cooe
+  _pfx='\033['     # prefix
+  _rst='m'         # reset
+  _bld='1m'        # bold
+  _ita='3m'        # italics
+  _red=';31m'      # red
+  _grn=';32m'      # green
+  _ylw=';33m'      # yellow
+  _wht=';37m'      # white
+
+  # Return nothing if not an interactive terminal
+  if [ ! -t 0 ]; then
+    return
+  fi
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      bld) printf %b "${_pfx}${_bld}" ; shift ;;
+      ita) printf %b "${_pfx}${_ita}" ; shift ;;
+      red) printf %b "${_pfx}${_red}" ; shift ;;
+      grn) printf %b "${_pfx}${_grn}" ; shift ;;
+      ylw) printf %b "${_pfx}${_ylw}" ; shift ;;
+      wht) printf %b "${_pfx}${_wht}" ; shift ;;
+      rst) printf %b "${_pfx}${_rst}" ; shift ;;
+        *) info "Unknown color: $1"   ; shift ;;
+    esac
+  done
+}
+
 append_array() {
   if [ -n "$2" ]; then
     out "$2"
@@ -112,9 +152,10 @@ main() {
     fi
   done
 
-  while getopts ':vdC:a:F:r:s:' OPTION; do
+  while getopts ':hvdC:a:F:r:s:' OPTION; do
     case "$OPTION" in
       d) Debug=1 ;;
+      h) help ; return ;;
       v) Verbose=1 ;;
       a) attach="$(append_array "$OPTARG" "$attach")" ;;
       C) . "$OPTARG" || exit 1 ;;
