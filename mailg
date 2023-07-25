@@ -90,6 +90,13 @@ debug() {
   fi
 }
 
+append_array() {
+  if [ -n "$2" ]; then
+    out "$2"
+  fi
+  out "$1"
+}
+
 main() {
   subj=""
   from_addr=""
@@ -97,12 +104,6 @@ main() {
   message=""
   attach=""
   from=""
-
-  # Get message from stdin
-  if [ -p /dev/stdin ] || [ -f /dev/stdin ]; then
-    message="$(cat)"
-    debug "message=$message"
-  fi
 
   # Check for configuration file
   for _conf in $Config_Defaults; do
@@ -115,7 +116,7 @@ main() {
     case "$OPTION" in
       d) Debug=1 ;;
       v) Verbose=1 ;;
-      a) attach="$OPTARG" ;;
+      a) attach="$(append_array "$OPTARG" "$attach")" ;;
       C) . "$OPTARG" || exit 1 ;;
       F) from_name="$OPTARG" ;;
       r) from_addr="$OPTARG" ;;
@@ -124,36 +125,10 @@ main() {
     esac
   done
   shift "$((OPTIND -1))"
-
-  debug "Verbose=$Verbose"
-  debug "Debug=$Debug"
-  debug "attach=$attach"
-  debug "subj=$subj"
-  debug "from_addr=$from_addr"
-  debug "from_name=$from_name"
-  debug "recipients=$*"
   
-  # Check for To: address
-  if [ -z "$1" ]; then
-    die "No recipient address."
-  fi
-
-  # Build recipient array
-  count=0
-  for _to in "$@"; do
-    [ "$count" -eq 0 ] && set --; count=$((count +1))
-    set -- "$@" -F "text=$_to"
-  done
-
-  # Check from Environment variables
-  if [ -z "$MAILGUN_API_KEY" ]; then
-    die "MAILGUN_API_KEY unset."
-  fi
-  if [ -z "$MAILGUN_API_DOMAIN" ]; then
-    die "MAILGUN_API_DOMAIN unset."
-  fi
-  if [ -z "$MAILGUN_API_URL" ]; then
-    die "MAILGUN_API_URL unset."
+  # Get message from stdin
+  if [ -p /dev/stdin ] || [ -f /dev/stdin ]; then
+    message="$(cat)"
   fi
   
   # Build "From" address
@@ -166,17 +141,55 @@ main() {
   else
     from="$from_addr"
   fi
-  debug "from=$from"
-  return
 
+  debug "Verbose=$Verbose"
+  debug "Debug=$Debug"
+  debug "attach=$attach"
+  debug "subj=$subj"
+  debug "from_addr=$from_addr"
+  debug "from_name=$from_name"
+  debug "from=$from"
+  debug "recipients=$*"
+  debug "message=$message"
+
+  # Check from Environment variables
+  if [ -z "$MAILGUN_API_KEY" ]; then
+    err "MAILGUN_API_KEY unset."
+  fi
+  if [ -z "$MAILGUN_API_DOMAIN" ]; then
+    err "MAILGUN_API_DOMAIN unset."
+  fi
+  if [ -z "$MAILGUN_API_URL" ]; then
+    err "MAILGUN_API_URL unset."
+  fi
+  
+  # Check for To: address
+  if [ -z "$1" ]; then
+    err "No recipient address."
+  fi
+  
+  # Build recipient array
+  count=0
+  for _to in "$@"; do
+    [ "$count" -eq 0 ] && set --; count=$((count +1))
+    set -- "$@" -F "text=$_to"
+  done
+
+  # Append attachments to array
+  if [ -n "$attach" ]; then
+    for _file in $attach; do
+      set -- "$@" -F "attachment=@$_file"
+    done
+  fi
+  
   # Post message
-  _res=$(mktemp 2>&1) || die "$_res"
+  _res=$(mktemp 2>&1) || die "$_res"    # temp file to cleanup later
   if ! _ret=$(curl -sS \
     -w "%{http_code}\n" \
     -o "$_res" \
     --user "api:$MAILGUN_API_KEY" \
     "$MAILGUN_API_URL/$MAILGUN_API_DOMAIN/messages" \
-    -F "subject=$subject" \
+    -F "subject=$subj" \
     -F "text=$message" \
     -F "from=$from" \
     "$@" 2>&1); then
@@ -185,7 +198,7 @@ main() {
   fi
 
   info "$(cat _res)"
-  rm "$_res"  # cleanup temp file
+  rm "$_res"                          # cleanup temp file
 
   if [ "$_ret" -ne 200 ]; then
     err "HTTP error code: $_ret"
