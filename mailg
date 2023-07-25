@@ -175,7 +175,13 @@ main() {
   message=""
   attach=""
   from=""
-  no_msg_skip=false
+  curl_bin=""
+  no_msg_skip=""
+
+  # Check for curl binary
+  if ! curl_bin="$(command -v curl 2>&1)"; then
+    die "curl not in path. Is it installed?"
+  fi
 
   # Check for configuration file
   for _conf in $Config_Defaults; do
@@ -187,7 +193,7 @@ main() {
   while getopts ':dhqvCE:a:F:f:r:s:' OPTION; do
     case "$OPTION" in
       d) Verbose=3 ;;
-      E) no_msg_skip=true ;;
+      E) no_msg_skip=1 ;;
       h) help ; return ;;
       q) Verbose=-1 ;;
       v) Verbose=1 ;;
@@ -251,7 +257,7 @@ main() {
     warn "No subject."
   fi
   if [ -z "$message" ]; then
-    if "$no_msg_skip"; then
+    if [ "$no_msg_skip" -eq 1 ]; then
       info "No message, aborting send."
       return
     fi
@@ -268,10 +274,11 @@ main() {
   debug "from=$from"
   debug "recipients=$*"
   debug "message=$message"
+  debug "curl_bin=$curl_bin"
 
   # Post message
   _res=$(mktemp 2>&1) || die "$_res"    # temp file to cleanup later
-  if ! _ret=$(curl -sS \
+  if ! _ret=$("$curl_bin" -sS \
     -w "%{http_code}\n" \
     -o "$_res" \
     --user "api:$MAILGUN_API_KEY" \
