@@ -90,26 +90,18 @@ debug() {
   fi
 }
 
-append_array() {
-  # Receive: value, existing array
-  if [ -n "$2" ]; then
-    out "$2"
-  fi
-  out "$1"
-}
-
 main() {
   subj=""
   from_addr=""
   from_name=""
   message=""
-  _attach=""
-  recipients=""
+  attach=""
+  from=""
 
   # Get message from stdin
   if [ -p /dev/stdin ] || [ -f /dev/stdin ]; then
     message="$(cat)"
-    debug "_message=$_message"
+    debug "message=$message"
   fi
 
   # Check for configuration file
@@ -132,11 +124,6 @@ main() {
     esac
   done
   shift "$((OPTIND -1))"
-  #
-  # Assemble recipient psuedo-array
-  for _to in $@; do
-    recipients="$(append_array "$1" "$recipients")"
-  done
 
   debug "Verbose=$Verbose"
   debug "Debug=$Debug"
@@ -144,12 +131,19 @@ main() {
   debug "subj=$subj"
   debug "from_addr=$from_addr"
   debug "from_name=$from_name"
-  debug "recipients=$recipients"
+  debug "recipients=$*"
   
   # Check for To: address
   if [ -z "$1" ]; then
     die "No recipient address."
   fi
+
+  # Build recipient array
+  count=0
+  for _to in "$@"; do
+    [ "$count" -eq 0 ] && set --; count=$((count +1))
+    set -- "$@" -F "text=$_to"
+  done
 
   # Check from Environment variables
   if [ -z "$MAILGUN_API_KEY" ]; then
@@ -161,7 +155,42 @@ main() {
   if [ -z "$MAILGUN_API_URL" ]; then
     die "MAILGUN_API_URL unset."
   fi
+  
+  # Build "From" address
+  if [ -z "${from_addr:=$MAILGUN_FROM_ADDRESS}" ]; then
+    from_addr="${USER:-nobody}@$MAILGUN_API_DOMAIN"
+  fi
 
+  if [ -n "${from_name:=$MAILGUN_FROM_NAME}" ]; then
+    from="$from_name <$from_addr>"
+  else
+    from="$from_addr"
+  fi
+  debug "from=$from"
+  return
+
+  # Post message
+  _res=$(mktemp 2>&1) || die "$_res"
+  if ! _ret=$(curl -sS \
+    -w "%{http_code}\n" \
+    -o "$_res" \
+    --user "api:$MAILGUN_API_KEY" \
+    "$MAILGUN_API_URL/$MAILGUN_API_DOMAIN/messages" \
+    -F "subject=$subject" \
+    -F "text=$message" \
+    -F "from=$from" \
+    "$@" 2>&1); then
+    err "curl error: $_res"
+    return 1
+  fi
+
+  info "$(cat _res)"
+  rm "$_res"  # cleanup temp file
+
+  if [ "$_ret" -ne 200 ]; then
+    err "HTTP error code: $_ret"
+    return 1
+  fi
 }
 
 main "$@"
