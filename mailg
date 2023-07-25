@@ -1,0 +1,167 @@
+#!/usr/bin/env sh
+# shellcheck disable=SC1090
+#
+# Copyright (c) 2023 Justin Teague
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+Prgnam='mailg'
+Version='0.0.42'
+Verbose=0
+Debug=0
+Config_Defaults="
+$PWD/$Prgnam.conf
+$PWD/.$Prgnam.conf
+$HOME/.$Prgnam.conf
+${XDG_CONFIG_HOME:-$HOME/.config}/$Prgnam.conf
+"
+# Envioronment variables
+MAILGUN_API_KEY="${MAILGUN_API_KEY:-}" 
+MAILGUN_API_DOMAIN="${MAILGUN_API_DOMAIN:-}"
+MAILGUN_API_URL="${MAILGUN_API_URL:-https://api.mailgun.net/v3}"
+MAILGUN_FROM_ADDRESS="${MAILGUN_FROM_ADDRESS:-}"  # Optional
+MAILGUN_FROM_NAME="${MAILGUN_FROM_NAME:-}"        # Optional
+
+# Usage
+usage() {
+  cat << EOF
+$Prgnam -- $Version
+Send mail via mailgun and curl from the command-line.
+
+Usage: $Prgnam [-vdE] [-s subject] [-r from email] [-F from name] to-address
+
+    -v    Verbose mode.
+    -d    Debug mode.
+    
+    -C    Configuration file.
+    -s    Subject.
+    -r    From email.
+    -F    From name.
+
+ENVIRONMENT VARIABLES
+
+    MAILGUN_API_KEY
+    MAILGUN_API_DOMAIN
+    MAILGUN_API_URL (default: https://api.mailgun.net/v3)
+    MAILGUN_FROM_ADDRESS
+    MAILGUN_FROM_NAME
+EOF
+}
+
+# STDIN/STDOUT Functions
+out() {
+  printf %s\\n "$*"
+}
+
+err() {
+  >&2 printf %s\\n "$*"
+}
+
+die() {
+  err "$*"
+  exit 1
+}
+
+info() {
+  if [ "$Verbose" -ge 1 ]; then
+    err "$*"
+  fi
+}
+
+debug() {
+  if [ "$Debug" -ge 1 ]; then
+    err "DEBUG: $*"
+  fi
+}
+
+append_array() {
+  # Receive: value, existing array
+  if [ -n "$2" ]; then
+    out "$2"
+  fi
+  out "$1"
+}
+
+main() {
+  subj=""
+  from_addr=""
+  from_name=""
+  message=""
+  _attach=""
+  recipients=""
+
+  # Get message from stdin
+  if [ -p /dev/stdin ] || [ -f /dev/stdin ]; then
+    message="$(cat)"
+    debug "_message=$_message"
+  fi
+
+  # Check for configuration file
+  for _conf in $Config_Defaults; do
+    if [ -r "$_conf" ]; then
+      . "$_conf" || exit 1
+    fi
+  done
+
+  while getopts ':vdC:a:F:r:s:' OPTION; do
+    case "$OPTION" in
+      d) Debug=1 ;;
+      v) Verbose=1 ;;
+      a) attach="$OPTARG" ;;
+      C) . "$OPTARG" || exit 1 ;;
+      F) from_name="$OPTARG" ;;
+      r) from_addr="$OPTARG" ;;
+      s) subj="$OPTARG" ;;
+      *) usage ; exit 1 ;;
+    esac
+  done
+  shift "$((OPTIND -1))"
+  #
+  # Assemble recipient psuedo-array
+  for _to in $@; do
+    recipients="$(append_array "$1" "$recipients")"
+  done
+
+  debug "Verbose=$Verbose"
+  debug "Debug=$Debug"
+  debug "attach=$attach"
+  debug "subj=$subj"
+  debug "from_addr=$from_addr"
+  debug "from_name=$from_name"
+  debug "recipients=$recipients"
+  
+  # Check for To: address
+  if [ -z "$1" ]; then
+    die "No recipient address."
+  fi
+
+  # Check from Environment variables
+  if [ -z "$MAILGUN_API_KEY" ]; then
+    die "MAILGUN_API_KEY unset."
+  fi
+  if [ -z "$MAILGUN_API_DOMAIN" ]; then
+    die "MAILGUN_API_DOMAIN unset."
+  fi
+  if [ -z "$MAILGUN_API_URL" ]; then
+    die "MAILGUN_API_URL unset."
+  fi
+
+}
+
+main "$@"
