@@ -81,7 +81,7 @@ out() {
 }
 
 err() {
-  >&2 printf %s\\n "$*"
+  >&2 out "$(clr bld red)[$Prgnam] ERROR: $*$(clr rst)"
 }
 
 die() {
@@ -89,28 +89,41 @@ die() {
   exit 1
 }
 
+warn() {
+  if [ "$Verbose" -ge 1 ]; then
+    >&2 out "$(clr bld ylw)[$Prgnam] WARN: $*$(clr rst)"
+  fi
+}
+
 info() {
   if [ "$Verbose" -ge 1 ]; then
-    err "$*"
+    >&2 out "$(clr bld grn)[$Prgnam]: $*$(clr rst)"
   fi
 }
 
 debug() {
   if [ "$Debug" -ge 1 ]; then
-    err "DEBUG: $*"
+    >&2 out "[$Prgnam] DEBUG: $*"
   fi
 }
-
+printf '%b Testing this color code' '\033[2m'
+return
 clr() {
   # Receives: color / format
   # Returns: Prints ANSI cooe
   _pfx='\033['     # prefix
   _rst='m'         # reset
   _bld='1m'        # bold
+  _fnt='2m'        # faint
   _ita='3m'        # italics
+  _udl='4m'        # underline
+  _blk=';30m'      # black
   _red=';31m'      # red
   _grn=';32m'      # green
   _ylw=';33m'      # yellow
+  _blu=';34m'      # blue
+  _pur=';34m'      # purple
+  _cya=';36m'      # cyan
   _wht=';37m'      # white
 
   # Return nothing if not an interactive terminal
@@ -120,14 +133,20 @@ clr() {
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      rst) printf %b "${_pfx}${_rst}" ; shift ;;
       bld) printf %b "${_pfx}${_bld}" ; shift ;;
+      fnt) printf %b "${_pfx}${_fnt}" ; shift ;;
       ita) printf %b "${_pfx}${_ita}" ; shift ;;
+      udl) printf %b "${_pfx}${_udl}" ; shift ;;
+      blk) printf %b "${_pfx}${_blk}" ; shift ;;
       red) printf %b "${_pfx}${_red}" ; shift ;;
       grn) printf %b "${_pfx}${_grn}" ; shift ;;
       ylw) printf %b "${_pfx}${_ylw}" ; shift ;;
+      blu) printf %b "${_pfx}${_blu}" ; shift ;;
+      pur) printf %b "${_pfx}${_pur}" ; shift ;;
+      cya) printf %b "${_pfx}${_cya}" ; shift ;;
       wht) printf %b "${_pfx}${_wht}" ; shift ;;
-      rst) printf %b "${_pfx}${_rst}" ; shift ;;
-        *) info "Unknown color: $1"   ; shift ;;
+        *) err "Unknown color: $1"    ; return 1 ;;
     esac
   done
 }
@@ -154,15 +173,16 @@ main() {
     fi
   done
 
-  while getopts ':hvdC:a:F:r:s:' OPTION; do
+  while getopts ':dhqvC:a:F:f:r:s:' OPTION; do
     case "$OPTION" in
       d) Debug=1 ;;
       h) help ; return ;;
+      q) Verbose=0 ;;
       v) Verbose=1 ;;
       a) attach="$(append_array "$OPTARG" "$attach")" ;;
       C) . "$OPTARG" || exit 1 ;;
       F) from_name="$OPTARG" ;;
-      r) from_addr="$OPTARG" ;;
+      f|r) from_addr="$OPTARG" ;;
       s) subj="$OPTARG" ;;
       *) usage ; exit 1 ;;
     esac
@@ -172,6 +192,22 @@ main() {
   # Get message from stdin
   if [ -p /dev/stdin ] || [ -f /dev/stdin ]; then
     message="$(cat)"
+  else
+    printf '> '
+    read -r message
+  fi
+  
+  return
+
+  # Check from Environment variables
+  if [ -z "$MAILGUN_API_KEY" ]; then
+    err "MAILGUN_API_KEY unset."
+  fi
+  if [ -z "$MAILGUN_API_DOMAIN" ]; then
+    err "MAILGUN_API_DOMAIN unset."
+  fi
+  if [ -z "$MAILGUN_API_URL" ]; then
+    err "MAILGUN_API_URL unset."
   fi
   
   # Build "From" address
@@ -185,27 +221,6 @@ main() {
     from="$from_addr"
   fi
 
-  debug "Verbose=$Verbose"
-  debug "Debug=$Debug"
-  debug "attach=$attach"
-  debug "subj=$subj"
-  debug "from_addr=$from_addr"
-  debug "from_name=$from_name"
-  debug "from=$from"
-  debug "recipients=$*"
-  debug "message=$message"
-
-  # Check from Environment variables
-  if [ -z "$MAILGUN_API_KEY" ]; then
-    err "MAILGUN_API_KEY unset."
-  fi
-  if [ -z "$MAILGUN_API_DOMAIN" ]; then
-    err "MAILGUN_API_DOMAIN unset."
-  fi
-  if [ -z "$MAILGUN_API_URL" ]; then
-    err "MAILGUN_API_URL unset."
-  fi
-  
   # Check for To: address
   if [ -z "$1" ]; then
     err "No recipient address."
@@ -224,6 +239,18 @@ main() {
       set -- "$@" -F "attachment=@$_file"
     done
   fi
+
+  debug "MAILGUN_API_KEY=$MAILGUN_API_KEY"
+  debug "MAILGUN_API_URL=$MAILGUN_API_URL"
+  debug "Verbose=$Verbose"
+  debug "Debug=$Debug"
+  debug "attach=$attach"
+  debug "subj=$subj"
+  debug "from_addr=$from_addr"
+  debug "from_name=$from_name"
+  debug "from=$from"
+  debug "recipients=$*"
+  debug "message=$message"
   
   # Post message
   _res=$(mktemp 2>&1) || die "$_res"    # temp file to cleanup later
@@ -240,10 +267,10 @@ main() {
     return 1
   fi
 
-  info "$(cat _res)"
+  info "$(cat "$_res")"
   rm "$_res"                          # cleanup temp file
 
-  if [ "$_ret" -ne 200 ]; then
+  if [ "$_ret" -ge 400 ]; then
     err "HTTP error code: $_ret"
     return 1
   fi
