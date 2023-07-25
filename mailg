@@ -106,8 +106,8 @@ debug() {
     >&2 out "[$Prgnam] DEBUG: $*"
   fi
 }
-printf '%b Testing this color code' '\033[2m'
-return
+
+# Color codes function
 clr() {
   # Receives: color / format
   # Returns: Prints ANSI cooe
@@ -192,13 +192,11 @@ main() {
   # Get message from stdin
   if [ -p /dev/stdin ] || [ -f /dev/stdin ]; then
     message="$(cat)"
-  else
+  elif [ -t 0 ]; then
     printf '> '
     read -r message
   fi
   
-  return
-
   # Check from Environment variables
   if [ -z "$MAILGUN_API_KEY" ]; then
     err "MAILGUN_API_KEY unset."
