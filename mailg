@@ -48,26 +48,35 @@ $Prgnam [-Edvq] [-b $(clr rst ita)bcc$(clr rst bld)] [-c $(clr rst ita)cc$(clr r
 EOF
 }
 
+version() {
+  cat << EOF
+$(clr bld)$Prgnam -- Version: $Version$(clr rst)
+$(clr ita)Send mail via mailgun and curl from the command-line.$(clr rst)
+EOF
+}
+
 help() {
   cat << EOF
-$(clr bld)$Prgnam$(clr rst) -- Version: $Version
-Send mail via mailgun and curl from the command-line.
+$(version)
 
 $(usage)
 
-    $(clr bld)-E$(clr rst)    Abort send if no message.
     $(clr bld)-d$(clr rst)    Debug mode.
-    $(clr bld)-v$(clr rst)    Verbose mode.
+    $(clr bld)-E$(clr rst)    Abort send if no message.
+    $(clr bld)-h$(clr rst)    Show help message.
     $(clr bld)-q$(clr rst)    Quiet mode.
+    $(clr bld)-v$(clr rst)    Verbose mode.
+    $(clr bld)-V$(clr rst)    Show version.
     
     $(clr bld)-C$(clr rst)    Configuration file.
-    $(clr bld)-s$(clr rst)    Subject.
-    $(clr bld)-r$(clr rst)    From address.
     $(clr bld)-F$(clr rst)    From name.
+    $(clr bld)-f$(clr rst)    From address.
+    $(clr bld)-r$(clr rst)    From address.
+    $(clr bld)-s$(clr rst)    Subject.
 
 $(clr bld)ENVIRONMENT VARIABLES
-    MAILGUN_API_KEY
-    MAILGUN_API_DOMAIN
+    MAILGUN_API_KEY $(clr ita)(required)$(clr rst bld)
+    MAILGUN_API_DOMAIN $(clr ita)(required)$(clr rst bld)
     MAILGUN_API_URL $(clr rst ita)(default: https://api.mailgun.net/v3)$(clr rst bld)
     MAILGUN_FROM_ADDRESS
     MAILGUN_FROM_NAME
@@ -190,13 +199,14 @@ main() {
     fi
   done
 
-  while getopts ':dhqvCE:a:F:f:r:s:' OPTION; do
+  while getopts ':dEhqvVa:C:F:f:r:s:' OPTION; do
     case "$OPTION" in
       d) Verbose=3 ;;
       E) no_msg_skip=1 ;;
       h) help ; return ;;
       q) Verbose=-1 ;;
       v) Verbose=1 ;;
+      V) version; return ;;
       a) attach="$(append_array "$OPTARG" "$attach")" ;;
       C) . "$OPTARG" || exit 1 ;;
       F) from_name="$OPTARG" ;;
