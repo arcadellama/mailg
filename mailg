@@ -24,8 +24,8 @@
 Prgnam='mailg'
 Version='0.0.42'
 Verbose=0
-Config_File_Name="${Prgnam}rc"
-Config_Defaults="
+Config_File_Name="${Prgnam}.conf"
+Config_Default_Locations="
 $PWD/$Config_File_Name
 $PWD/.$Config_File_Name
 $HOME/.$Config_File_Name
@@ -193,7 +193,7 @@ main() {
   fi
 
   # Check for configuration file
-  for _conf in $Config_Defaults; do
+  for _conf in $Config_Default_Locations; do
     if [ -r "$_conf" ]; then
       . "$_conf" || exit 1
     fi
