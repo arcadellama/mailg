@@ -74,7 +74,7 @@ $(usage)
     $(clr bld)-r$(clr rst)    From address.
     $(clr bld)-s$(clr rst)    Subject.
 
-$(clr bld)ENVIRONMENT VARIABLES
+$(clr bld)CONFIGURATION VARIABLES
     MAILGUN_API_KEY $(clr ita)(required)$(clr rst bld)
     MAILGUN_API_DOMAIN $(clr ita)(required)$(clr rst bld)
     MAILGUN_API_URL $(clr rst ita)(default: https://api.mailgun.net/v3)$(clr rst bld)
